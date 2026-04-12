@@ -15,4 +15,9 @@ It has three goals:
 - `chain-processor-evm`
 - `coordinator`
 - `cosigner`
-- `threshold-signing-demo`
+
+## Experiments And Demos
+- `unified-threshold-signing-prototype`
+- `cggmp24-http-benchmark`
+- `threshold-key-bridge-prototype`
+
