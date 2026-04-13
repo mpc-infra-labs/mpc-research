@@ -194,9 +194,7 @@ These approaches may be operationally useful, but they should not be described a
 
 ### 6.1 ChainUp
 
-ChainUp publicly documents an MPC wallet product, multi-chain support, and a BIP44-style address path structure for wallet addresses [R1][R2]. That is enough to show that HD-wallet concepts exist at the product layer.
-
-It is not enough to verify the cryptographic implementation of hardened derivation.
+ChainUp publicly documents an MPC wallet product, multi-chain support, and a BIP44-style address path structure for wallet addresses [R1][R2]. This is enough to show HD-wallet concepts at the product layer. It is not enough to verify hardened derivation cryptographically.
 
 No public derivation library or threshold HD-wallet implementation was available in the reviewed materials to independently verify:
 
@@ -204,47 +202,41 @@ No public derivation library or threshold HD-wallet implementation was available
 - whether the derivation function is standard BIP32-compatible
 - whether any trusted component is involved
 
-So for research purposes, ChainUp is best treated as a product claim rather than as auditable cryptographic evidence.
+For research purposes, ChainUp is therefore best treated as a product claim rather than as auditable cryptographic evidence.
 
 ### 6.2 Fireblocks
 
-Fireblocks is more interesting because it has a public `mpc-lib` repository. The public code is useful not because it proves the full production design, but because it exposes where the hardened boundary actually appears.
+Fireblocks is more useful because it has a public `mpc-lib` repository. Two pieces of code matter.
 
-Two pieces of evidence matter.
-
-First, in `src/common/blockchain/mpc/hd_derive.cpp`, the hardened branch switches from the public-key derivation path to the private-key derivation path, and public-only derivation rejects hardened indices [R3]. This is the standard BIP32 distinction made explicit in code rather than only in documentation.
+First, in `src/common/blockchain/mpc/hd_derive.cpp`, the hardened branch switches from the public-key derivation path to the private-key derivation path, and public-only derivation rejects hardened indices [R3]. This matches the standard BIP32 distinction.
 
 <img src="./assets/fireblocks-hardened-hd-derive.png" alt="Fireblocks public hd_derive implementation showing hardened branch" width="720" />
 
-Second, the more revealing code path is the higher-level `cmp_ecdsa_signing_service::derivation_key_delta(...)` routine. In that path, the code defines a zero private key and calls the generic private-derivation helper with that zero value in order to obtain a derivation delta that can later be added to the MPC signing state.
+Second, the more revealing code path is the higher-level `cmp_ecdsa_signing_service::derivation_key_delta(...)` routine. There, the code defines a zero private key and calls the generic private-derivation helper with that zero value in order to obtain a derivation delta that can later be added to the MPC signing state.
 
 <img src="./assets/fireblocks-derivation-key-delta-zero.png" alt="Fireblocks derivation_key_delta path showing zero private key input" width="760" />
 
-That observation matters more than the lower-level hash branch, because it shows how derivation is connected to the MPC signing flow. The code is not simply deriving a full child private key in the ordinary single-device sense. It is extracting an additive delta from the derivation function.
+This matters more than the lower-level hash branch because it shows how derivation is connected to the MPC signing flow. The code is not simply deriving a full child private key. It is extracting an additive delta from the derivation function.
 
-For non-hardened derivation, this makes good algebraic sense. The child-key tweak is public-key based, so deriving from zero can be used as a way to isolate the path-dependent offset that must be added to the existing secret shares.
+For non-hardened derivation, this is algebraically natural. For hardened derivation, standard BIP32 would require the tweak to depend on the actual parent private key. Replacing that input with zero makes standard BIP32 equivalence non-obvious. The public code therefore supports a narrower conclusion:
 
-For hardened derivation, however, standard BIP32 would require the tweak to depend on the actual parent private key. Replacing that input with zero makes standard BIP32 equivalence non-obvious. The public code therefore supports a narrower conclusion:
-
-- Fireblocks clearly treats hardened derivation as a private-input problem at the lower derivation layer
+- Fireblocks treats hardened derivation as a private-input problem at the lower derivation layer
 - the higher signing-service path appears to recast derivation as an additive delta by deriving from zero
-- from the public repository alone, this is not enough to conclude that the production MPC stack implements standard BIP32-hardened derivation in a transparent and verifiable way
+- the public repository does not provide convincing evidence of standard BIP32-hardened support in a transparent and verifiable sense
 
-For research purposes, the more defensible statement is therefore not that Fireblocks publicly demonstrates hardened support, but that its public repository does not provide convincing evidence of standard BIP32-hardened support. At minimum, the public implementation is not transparent enough to treat "hardened supported" and "standard BIP32-hardened support verified" as the same claim.
-
-That is the main research value of the Fireblocks material. It does not settle the production architecture, but it does show exactly where the tension lies between BIP32 semantics and MPC-friendly additive derivation.
+For research purposes, Fireblocks should therefore not be treated as publicly verified support for standard BIP32-hardened derivation.
 
 ### 6.3 Coinbase
 
-Coinbase is the clearest public example of the second solution family.
+Coinbase is the clearest public example of the second solution family. Its official `cb-mpc` repository states that the `HD-MPC` example is "not BIP32-compliant, but is indistinguishable from it" and points readers to `docs/theory/mpc-friendly-derivation-theory.pdf` [R4][R5].
 
-Its official `cb-mpc` repository states that the `HD-MPC` example is "not BIP32-compliant, but is indistinguishable from it" and points readers to `docs/theory/mpc-friendly-derivation-theory.pdf` [R4][R5]. That sentence is important because it states the tradeoff directly: Coinbase wants HD-wallet behavior without claiming exact BIP32 semantics.
+The corresponding source code implements hardened derivation through a different primitive rather than through standard BIP32 HMAC over the parent private key [R6]. The path runs through a two-party VRF-like computation that outputs the tweak used to update the private-key shares.
 
-The corresponding source code implements hardened derivation through a different primitive rather than through standard BIP32 HMAC over the parent private key [R6]. The derivation path runs through a two-party VRF-like computation that outputs the tweak used to update the private-key shares. In other words, Coinbase solves the "private key is unavailable as a single value" problem by redesigning the derivation primitive so that the tweak can be generated from shares directly.
+This is the cleanest public statement among the reviewed vendors:
 
-That is a legitimate solution, but it changes interoperability.
-
-Once the hardened derivation function is no longer BIP32 `CKDpriv`, ordinary extended-key recovery semantics no longer follow automatically. Operationally, recovering the same child tree requires the Coinbase derivation logic, not vanilla BIP32 re-derivation from a standard exported root key alone. This point is an inference from Coinbase's own statement that the system is not BIP32-compliant [R4][R5].
+- Coinbase does support an MPC-friendly hardened-style derivation flow
+- Coinbase does not present it as standard BIP32 compatibility
+- recovery of the same child tree therefore depends on the Coinbase derivation logic rather than on vanilla BIP32 re-derivation from a standard exported root key alone
 
 
 ## 7. Implications for MPC Custody Systems
